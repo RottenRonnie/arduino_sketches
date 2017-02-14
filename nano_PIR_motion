@@ -1,0 +1,32 @@
+//Henry's Bench
+// http://henrysbench.capnfatz.com/henrys-bench/arduino-sensors-and-input/arduino-hc-sr501-motion-sensor-tutorial/
+// HC-SR501 Motion Detector
+// Sample Sketch that includes a serial monitor for giggles
+
+int ledPin = 13;  // LED on Pin 13 of Arduino
+int pirPin = 7; // Input for HC-S501
+
+int pirValue; // Place to store read PIR Value
+
+
+void setup() {
+   Serial.begin(9600);
+  Serial.println("PIR HC SR-501 Motion Sensor");
+  pinMode(ledPin, OUTPUT);
+  pinMode(pirPin, INPUT);
+ 
+  digitalWrite(ledPin, LOW);
+  
+  
+  
+}
+
+void loop() {
+  pirValue = digitalRead(pirPin);
+  digitalWrite(ledPin, pirValue);
+  Serial.println(pirValue);
+ if(pirValue >= 1){
+    Serial.println("1 Motion detected");}
+    
+  delay(2000);
+}
