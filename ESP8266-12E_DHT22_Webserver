@@ -1,0 +1,233 @@
+/* ESP8266 Temperature Humidity & Moisture Soil Moisture
+moded by www.14core.com / Java Script by Google.com {https://www.gstatic.com/charts/loader.js}
+Note: You need to connect to the internet to get the guage which is transmit by the sensor .
+**********************************************************************************************
+*http://www.14core.com/wiring-the-esp8266-12e-remote-soil-moisture-temperature-humidity-monitor/
+*
+Ip address: 192.168.1.100 // 
+Gatway: 192.168.1.1 // Check your AP gateway 
+Subnet Mask: 255.255.255.0 
+*/
+
+//Modified by RKierstead 2017-06-18
+//removed Moisture sensor
+
+#include <ESP8266WiFi.h>
+#include "DHT.h"
+#define DHTTYPE DHT22
+
+const char* ssid = "YOUR_SSID_HERE"; //You can change the SSID 
+const char* password = "YOUR_WIFI_PWD_HERE"; //You can change the password as you like
+
+int WiFiStrength = 0;
+WiFiServer server(80);
+
+const int DHTPin = D3;  // 2
+const int moist = 14;  // ~D5
+const int ledStatus = D2;// ~D2
+
+DHT dht (DHTPin, DHTTYPE);
+
+static char celsiusTemp[7];
+static char fahrenheitTemp[7];
+static char humidityTemp[7];
+double moisture = 0.0;
+unsigned long timeHolder = 0;
+
+
+void setup() {
+  Serial.begin(115200);
+  delay(10);
+  dht.begin();
+  pinMode(ledStatus, OUTPUT);
+  pinMode(moisture, INPUT);
+  analogWrite(ledStatus, 280);
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+  // This line should the same with your router/internet connection to parse the javascript which is provided by Google
+  //IPAddress value will create a static IP on your LAN. Change the values to reflect your network. 
+  WiFi.config(IPAddress(192, 168, 0, 122), IPAddress(192, 168, 0, 1), IPAddress(255, 255, 255, 0)); 
+  // connect to WiFi router
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.println("....");
+  }
+
+  Serial.println("------------------------");
+  Serial.println("WiFi connected");
+  // Start the server
+  server.begin();
+  Serial.println("Server started, setting up ESP8266 IP Address...");
+  Serial.print("Use this URL to connect: ");
+  Serial.print("http://");
+  Serial.print(WiFi.localIP());
+  Serial.println("/");
+
+}
+
+void loop() {
+
+
+  ++timeHolder;  //increments the timeHolder variable by 1 for each loop
+
+  digitalWrite(ledStatus, 0);
+  delay(100);
+  digitalWrite(ledStatus, 1);
+    
+  WiFiStrength = WiFi.RSSI(); // get decibels measured from the ESP8266
+  moisture = analogRead(moist); // set to get analogRead from variable moist
+  float humid = dht.readHumidity();
+  float temp = dht.readTemperature();
+  float far = dht.readTemperature(true);
+  int moistval = (moisture * 100) / 400;
+  moistval = 100 - moistval;
+  if (isnan(humid) || isnan(temp) || isnan(far)){
+    
+               Serial.println("Failed to read from DHT sensor!");
+              strcpy(celsiusTemp,"Failed");
+              strcpy(fahrenheitTemp, "Failed");
+              strcpy(humidityTemp, "Failed");     
+  }
+  else {
+    
+      float thcal = dht.computeHeatIndex(temp, humid, false);
+      dtostrf(thcal, 6, 2, celsiusTemp); 
+      float tfcal = dht.computeHeatIndex(far, humid);
+            dtostrf(tfcal, 6, 2, fahrenheitTemp);         
+            dtostrf(humid, 6, 2, humidityTemp);
+      
+//      Serial.print("Moist: ");
+//      Serial.println(moistval);
+      Serial.print("Celsius: ");
+      Serial.println(temp);
+      Serial.print("Fahrenheit:");
+      Serial.println(far);
+      Serial.print("Humidity: ");
+      Serial.println(humid);
+     
+      Serial.print("TimeHolder: ");
+      Serial.println(timeHolder);
+      Serial.print("millis(): ");
+      Serial.println(millis());
+      Serial.print("WiFi Strength: ");
+      Serial.print(WiFiStrength); 
+      Serial.println("dBm");
+      Serial.println(" ");
+      delay(10000); // slows amount of data sent via serial
+  }
+
+  // Serial data
+ 
+  WiFiClient client = server.available(); //Cheack any web server request 
+  if (!client) {
+    return;
+  }
+  Serial.println("Client Request...");
+  // Read the first line of the request
+  String request = client.readStringUntil('\r');
+ Serial.println(request);
+  client.flush();
+
+  // Return the response
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: text/html");
+  client.println(""); //  do not forget this one
+  client.println("<!DOCTYPE HTML>");
+
+  client.println("<html>");
+  client.println(" <head>");
+  client.println("<meta http-equiv=\"refresh\" content=\"60\">");
+  client.println(" <script type=\"text/javascript\" src=\"https://www.gstatic.com/charts/loader.js\"></script>");
+  client.println("  <script type=\"text/javascript\">");
+  client.println("    google.charts.load('current', {'packages':['gauge']});");
+  client.println("    google.charts.setOnLoadCallback(drawChart);");
+  client.println("   function drawChart() {");
+
+// Humidity
+  client.println("      var data = google.visualization.arrayToDataTable([ ");
+  client.println("      ['Label', 'Value'], ");
+  client.print("        ['Humid',  ");
+  client.print(humid);
+  client.println(" ], ");
+  client.println("       ]); ");
+// Temperature
+  client.println("      var data = google.visualization.arrayToDataTable([ ");
+  client.println("      ['Label', 'Value'], ");
+  client.print("        ['Temp',  ");
+  client.print(temp);
+  client.println(" ], ");
+  client.println("       ]); ");
+//// Moisture
+//  client.println("      var data = google.visualization.arrayToDataTable([ ");
+//  client.println("      ['Label', 'Value'], ");
+//  client.print("        ['Moisture',  ");
+//  client.print(moistval);
+//  client.println(" ], ");
+//  client.println("       ]); ");
+  
+  
+  
+  // setup the google chart options here
+  client.println("    var options = {");
+  client.println("      width: 500, height: 120,");
+  client.println("      redFrom: 0, redTo: 25,");
+  client.println("      yellowFrom: 25, yellowTo: 75,");
+  client.println("      greenFrom: 75, greenTo: 100,");
+  client.println("       minorTicks: 5");
+  client.println("    };");
+
+  client.println("   var chart = new google.visualization.Gauge(document.getElementById('gauge_div'));");
+  client.println("  chart.draw(data, options);");
+  //Temperature
+  client.println("  setInterval(function() {");
+  client.print("  data.setValue(0, 1, ");
+  client.print(temp);
+  client.println("    );");
+  client.println("    chart.draw(data, options);");
+  client.println("    }, 13000);");
+//  //Humidity
+//  client.println("  setInterval(function() {");
+//  client.print("  data.setValue(0, 1, ");
+//  client.print(humid);
+//  client.println("    );");
+//  client.println("    chart.draw(data, options);");
+//  client.println("    }, 13000);");
+//  // Moisture
+//  client.println("  setInterval(function() {");
+//  client.print("  data.setValue(0, 1, ");
+//  client.print(moistval);
+//  client.println("    );");
+//  client.println("    chart.draw(data, options);");
+//  client.println("    }, 13000);");
+
+  client.println("  }");
+  client.println(" </script>");
+
+  client.println("  </head>");
+  client.println("  <body>");
+  client.println("<center>");
+  client.print("<h1 style=\"size:12px;\">ESP8266 Temperature <br/> Humidity Monitor</h1>");
+  client.print("WiFi Signal Strength: ");
+  client.print(WiFiStrength);
+  client.println("dBm<br>");
+//  client.print("<br/>Soil Moisture :");
+//  client.print(moistval);
+  client.println();
+  client.println();
+  client.print("<br/><br/>Temperature in Celsius:");
+  client.print(celsiusTemp);
+  client.print("<br/>Temperature in Fahrenheit: ");
+  client.print(fahrenheitTemp);
+  client.print("<br/>Humidity: ");
+  client.print(humidityTemp);
+  client.print("<br/><br/>");
+  client.println("<div id=\"gauge_div\" style=\"width: 300px; height: 120px;\"></div>");
+  client.println("<br><br><a href=\"/REFRESH\"\"><button>Refresh</button></br><br/></a>");
+  client.println("</center>");
+  client.println("</body>");
+  client.println("</html>");
+  
+}
